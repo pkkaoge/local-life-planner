@@ -94,6 +94,9 @@ const ui = {
   remoteQuery: "",
   remoteSuggestions: [],
   remoteLoading: false,
+  modalSearch: "",
+  modalSuggestions: [],
+  modalSearchLoading: false,
   authPhone: "",
   authCode: "",
   smsPhone: "",
@@ -117,6 +120,8 @@ let syncTimer = 0;
 let toastTimer = 0;
 let remoteTimer = 0;
 let remoteToken = 0;
+let modalSearchTimer = 0;
+let modalSearchToken = 0;
 let amapPromise = null;
 const routeLegCache = new Map();
 
@@ -893,6 +898,8 @@ function renderModal() {
   const form = ui.form;
   const isEdit = Boolean(form.id);
   const locationReady = hasCoordinates(form);
+  const showPoi = ui.modalSearch.trim().length >= 2;
+  const poiList = showPoi ? ui.modalSuggestions : [];
   return `
     <div class="modal-backdrop">
       <div class="modal" role="dialog" aria-modal="true" aria-label="${isEdit ? "编辑店铺" : "添加店铺"}">
@@ -901,9 +908,20 @@ function renderModal() {
           <button class="btn secondary icon-only" data-action="close-modal" title="关闭">${icon("x")}</button>
         </div>
         <form id="shop-form" class="form-grid">
-          <div class="field">
+          <div class="field" style="position:relative">
             <label>店铺名称</label>
-            <input name="name" required value="${attr(form.name || "")}" placeholder="例如：某某烤肉 静安寺店" />
+            <input name="name" required value="${attr(form.name || "")}" placeholder="输入店铺名搜索，如：某某烤肉 静安寺店" data-field="modal-shop-name" autocomplete="off" />
+            ${showPoi ? `<div class="poi-dropdown">
+              <div class="poi-dropdown-header">${ui.modalSearchLoading ? "搜索中..." : `${poiList.length} 条结果`}</div>
+              ${poiList.map((poi, i) => `
+                <div class="poi-item" data-action="select-poi" data-index="${i}">
+                  <div class="poi-name">${escapeHtml(poi.name)}</div>
+                  <div class="poi-addr">${escapeHtml(poi.address || "")}</div>
+                </div>
+              `).join("")}
+              ${!ui.modalSearchLoading && !poiList.length ? '<div class="poi-empty">无匹配结果</div>' : ""}
+            </div>` : ""}
+          </div>
           </div>
           <div class="field">
             <label>地址</label>
@@ -1080,9 +1098,27 @@ async function handleClick(event) {
     return;
   }
 
+  if (action === "select-poi") {
+    const poi = ui.modalSuggestions[Number(button.dataset.index)];
+    if (poi) {
+      ui.form.name = poi.name;
+      ui.form.address = poi.address || "";
+      ui.form.lat = poi.lat ?? "";
+      ui.form.lng = poi.lng ?? "";
+      ui.form.category = poi.category || "";
+      ui.modalSearch = poi.name;
+      ui.modalSuggestions = [];
+      render();
+      toast("已填入店铺信息");
+    }
+    return;
+  }
+
   if (action === "close-modal") {
     ui.modal = null;
     ui.form = {};
+    ui.modalSearch = "";
+    ui.modalSuggestions = [];
     render();
     return;
   }
@@ -1183,6 +1219,20 @@ function handleInput(event) {
     render();
     focusSearch(cursor);
     scheduleRemoteSearch(ui.searchQuery);
+    return;
+  }
+
+  if (target.dataset.field === "modal-shop-name") {
+    const cursor = target.selectionStart ?? target.value.length;
+    ui.form.name = target.value;
+    ui.modalSearch = target.value;
+    ui.modalSuggestions = [];
+    scheduleModalSearch(ui.modalSearch);
+    render();
+    requestAnimationFrame(() => {
+      const el = document.querySelector('[data-field="modal-shop-name"]');
+      if (el) { el.focus(); el.setSelectionRange(cursor, cursor); }
+    });
     return;
   }
 
@@ -1890,6 +1940,69 @@ function scheduleRemoteSearch(query) {
   }, 350);
 }
 
+function scheduleModalSearch(query) {
+  clearTimeout(modalSearchTimer);
+  const key = amapKey();
+  if (!key || query.trim().length < 2) {
+    if (query.trim().length < 2) {
+      ui.modalSuggestions = SAMPLE_POIS
+        .filter((poi) => normalize(`${poi.name} ${poi.address} ${poi.category}`).includes(normalize(query)))
+        .slice(0, 5)
+        .map((poi) => ({ ...poi, source: "演示库" }));
+    } else {
+      ui.modalSuggestions = [];
+    }
+    ui.modalSearchLoading = false;
+    return;
+  }
+
+  ui.modalSearchLoading = true;
+
+  modalSearchTimer = window.setTimeout(async () => {
+    const token = ++modalSearchToken;
+    try {
+      const AMap = await ensureAmap();
+      const autocomplete = new AMap.AutoComplete({
+        city: configuredCity(),
+        citylimit: false
+      });
+      autocomplete.search(query, (status, result) => {
+        if (token !== modalSearchToken) return;
+        ui.modalSearchLoading = false;
+        ui.modalSuggestions = status === "complete" && Array.isArray(result.tips)
+          ? result.tips
+              .filter((tip) => tip.name && tip.location)
+              .map((tip) => ({
+                name: tip.name,
+                address: `${tip.district || ""}${tip.address || ""}`,
+                lat: Number(tip.location.lat),
+                lng: Number(tip.location.lng),
+                category: tip.type || "商户",
+                source: "高德"
+              }))
+              .slice(0, 6)
+          : [];
+        render();
+        requestAnimationFrame(() => {
+          const el = document.querySelector('[data-field="modal-shop-name"]');
+          if (el) el.focus();
+        });
+      });
+    } catch {
+      ui.modalSearchLoading = false;
+      ui.modalSuggestions = SAMPLE_POIS
+        .filter((poi) => normalize(`${poi.name} ${poi.address} ${poi.category}`).includes(normalize(query)))
+        .slice(0, 5)
+        .map((poi) => ({ ...poi, source: "演示库" }));
+      render();
+      requestAnimationFrame(() => {
+        const el = document.querySelector('[data-field="modal-shop-name"]');
+        if (el) el.focus();
+      });
+    }
+  }, 350);
+}
+
 function focusSearch(cursor) {
   if (ui.activeView !== "shops") return;
   window.requestAnimationFrame(() => {
@@ -1979,23 +2092,43 @@ async function geocodeAddressValue(address) {
   }
 }
 
+async function reverseGeocode(lat, lng) {
+  try {
+    const AMap = await ensureAmap();
+    const geocoder = new AMap.Geocoder({ city: configuredCity() });
+    return await new Promise((resolve) => {
+      geocoder.getAddress([lng, lat], (status, result) => {
+        if (status === "complete" && result.regeocode?.formattedAddress) {
+          resolve(result.regeocode.formattedAddress);
+        } else {
+          resolve(null);
+        }
+      });
+    });
+  } catch {
+    return null;
+  }
+}
+
 function locateHome() {
   if (!navigator.geolocation) {
     toast("当前浏览器不支持定位");
     return;
   }
+  toast("正在定位...");
   navigator.geolocation.getCurrentPosition(
-    (position) => {
+    async (position) => {
       data.settings.homeLat = Number(position.coords.latitude.toFixed(6));
       data.settings.homeLng = Number(position.coords.longitude.toFixed(6));
       data.settings.homeLabel = "当前位置";
-      data.settings.homeAddress = "手机定位坐标";
+      const address = await reverseGeocode(data.settings.homeLat, data.settings.homeLng);
+      data.settings.homeAddress = address || `${data.settings.homeLat}, ${data.settings.homeLng}`;
       saveData();
       render();
-      toast("已更新达人住址坐标");
+      toast(address ? "已更新达人住址" : "已更新坐标，地址需手动补充");
     },
     () => toast("定位失败，请确认浏览器定位权限"),
-    { enableHighAccuracy: true, timeout: 9000 }
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 }
 

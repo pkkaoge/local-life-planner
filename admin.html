@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>探店排期助手 · 订单确认</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+    <style>
+      body {
+        background: var(--bg);
+      }
+
+      .admin-shell {
+        width: min(100%, 860px);
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 18px 14px 36px;
+      }
+
+      .admin-card {
+        display: grid;
+        gap: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 14px;
+        box-shadow: var(--shadow);
+      }
+
+      .admin-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .admin-order {
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+      }
+
+      .admin-order-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="admin-shell">
+      <section class="admin-card">
+        <div>
+          <p class="eyebrow">管理员后台</p>
+          <h1>支付宝转账订单确认</h1>
+        </div>
+        <div class="field">
+          <label>API 地址</label>
+          <input id="apiBase" placeholder="同域部署可留空，例如 https://api.example.com" />
+        </div>
+        <div class="field">
+          <label>管理员 Token</label>
+          <input id="adminToken" type="password" placeholder="ADMIN_TOKEN" />
+        </div>
+        <div class="button-row">
+          <button class="btn green" id="loadOrders">加载待确认订单</button>
+          <button class="btn secondary" id="saveToken">保存到本机</button>
+        </div>
+        <p class="settings-note">核对支付宝到账后再点确认开通。这个页面不会自动判断到账。</p>
+      </section>
+
+      <section class="section">
+        <div class="section-title">
+          <h2>待确认订单</h2>
+          <span class="mini-chip" id="orderCount">0 单</span>
+        </div>
+        <div class="admin-list" id="orders"></div>
+      </section>
+    </main>
+
+    <script>
+      const apiBaseInput = document.querySelector("#apiBase");
+      const tokenInput = document.querySelector("#adminToken");
+      const ordersBox = document.querySelector("#orders");
+      const orderCount = document.querySelector("#orderCount");
+
+      apiBaseInput.value = localStorage.getItem("planner_admin_api_base") || "";
+      tokenInput.value = localStorage.getItem("planner_admin_token") || "";
+
+      document.querySelector("#saveToken").addEventListener("click", () => {
+        localStorage.setItem("planner_admin_api_base", apiBaseInput.value.trim());
+        localStorage.setItem("planner_admin_token", tokenInput.value.trim());
+        alert("已保存到本机浏览器");
+      });
+
+      document.querySelector("#loadOrders").addEventListener("click", loadOrders);
+
+      async function adminFetch(path, options = {}) {
+        const apiBase = apiBaseInput.value.trim().replace(/\/$/, "");
+        const token = tokenInput.value.trim();
+        const response = await fetch(`${apiBase}${path}`, {
+          method: options.method || "GET",
+          headers: {
+            "authorization": `Bearer ${token}`,
+            ...(options.body ? { "content-type": "application/json" } : {})
+          },
+          body: options.body ? JSON.stringify(options.body) : undefined
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.ok === false) {
+          throw new Error(payload.error || `请求失败：${response.status}`);
+        }
+        return payload;
+      }
+
+      async function loadOrders() {
+        ordersBox.innerHTML = "<div class='empty'><div><strong>正在加载</strong><p>请稍等。</p></div></div>";
+        try {
+          const result = await adminFetch("/api/admin/orders?status=submitted");
+          const orders = result.orders || [];
+          orderCount.textContent = `${orders.length} 单`;
+          ordersBox.innerHTML = orders.length ? orders.map(renderOrder).join("") : "<div class='empty'><div><strong>没有待确认订单</strong><p>用户点“我已付款”后会出现在这里。</p></div></div>";
+        } catch (error) {
+          ordersBox.innerHTML = `<div class='empty'><div><strong>加载失败</strong><p>${escapeHtml(error.message)}</p></div></div>`;
+        }
+      }
+
+      function renderOrder(order) {
+        const amount = `¥${(Number(order.amount_cents || 0) / 100).toFixed(2).replace(/\\.00$/, "")}`;
+        return `
+          <article class="admin-order">
+            <div class="admin-order-head">
+              <div>
+                <h3>${escapeHtml(order.order_no)}</h3>
+                <p class="meta">${escapeHtml(order.phone)} · ${escapeHtml(planLabel(order.plan))} · ${amount}</p>
+              </div>
+              <span class="status-chip pending">${escapeHtml(order.status)}</span>
+            </div>
+            <p class="settings-note">提交时间：${escapeHtml(order.updated_at || order.created_at || "")}</p>
+            <div class="button-row">
+              <button class="btn green small" data-order="${escapeHtml(order.order_no)}">确认到账并开通</button>
+            </div>
+          </article>
+        `;
+      }
+
+      ordersBox.addEventListener("click", async (event) => {
+        const button = event.target.closest("[data-order]");
+        if (!button) return;
+        const orderNo = button.dataset.order;
+        if (!confirm(`确认订单 ${orderNo} 已到账并开通会员吗？`)) return;
+        button.disabled = true;
+        try {
+          await adminFetch("/api/admin/activate", {
+            method: "POST",
+            body: { orderNo }
+          });
+          await loadOrders();
+          alert("已开通");
+        } catch (error) {
+          alert(error.message);
+          button.disabled = false;
+        }
+      });
+
+      function escapeHtml(value = "") {
+        return String(value).replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        })[char]);
+      }
+
+      function planLabel(plan) {
+        const labels = {
+          "pro-monthly": "月付",
+          "pro-yearly": "年付",
+          "pro-lifetime": "终身"
+        };
+        return labels[plan] || plan || "会员";
+      }
+    </script>
+  </body>
+</html>

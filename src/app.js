@@ -1960,8 +1960,8 @@ function scheduleRemoteSearch(query) {
 function scheduleModalSearch(query) {
   clearTimeout(modalSearchTimer);
   const key = amapKey();
-  if (!key || query.trim().length < 2) {
-    if (query.trim().length < 2) {
+  if (query.trim().length < 2) {
+    if (query.trim().length > 0) {
       ui.modalSuggestions = SAMPLE_POIS
         .filter((poi) => normalize(`${poi.name} ${poi.address} ${poi.category}`).includes(normalize(query)))
         .slice(0, 5)
@@ -1973,46 +1973,60 @@ function scheduleModalSearch(query) {
     return;
   }
 
+  if (!key) {
+    ui.modalSuggestions = SAMPLE_POIS
+      .filter((poi) => normalize(`${poi.name} ${poi.address} ${poi.category}`).includes(normalize(query)))
+      .slice(0, 5)
+      .map((poi) => ({ ...poi, source: "演示库" }));
+    ui.modalSearchLoading = false;
+    return;
+  }
+
   ui.modalSearchLoading = true;
 
   modalSearchTimer = window.setTimeout(async () => {
     const token = ++modalSearchToken;
     try {
       const AMap = await ensureAmap();
-      // 使用用户实际位置做搜索偏向，提升精准度
-      const searchOpts = {
-        city: configuredCity(),
-        citylimit: false
-      };
-      // 如果有达人住址坐标或GPS坐标，设置 location 偏向
-      const locLat = data.settings.homeLat || userGpsLat;
-      const locLng = data.settings.homeLng || userGpsLng;
-      if (Number.isFinite(locLat) && Number.isFinite(locLng)) {
-        searchOpts.location = new AMap.LngLat(locLng, locLat);
-      }
-      const autocomplete = new AMap.AutoComplete(searchOpts);
-      autocomplete.search(query, (status, result) => {
-        if (token !== modalSearchToken) return;
-        ui.modalSearchLoading = false;
-        ui.modalSuggestions = status === "complete" && Array.isArray(result.tips)
-          ? result.tips
-              .filter((tip) => tip.name && tip.location)
-              .map((tip) => ({
-                name: tip.name,
-                address: `${tip.district || ""}${tip.address || ""}`,
-                lat: Number(tip.location.lat),
-                lng: Number(tip.location.lng),
-                category: tip.type || "商户",
-                source: "高德"
-              }))
-              .slice(0, 6)
-          : [];
-        render();
-        requestAnimationFrame(() => {
-          const el = document.querySelector('[data-field="modal-shop-name"]');
-          if (el) el.focus();
+      const locLat = userGpsLat || data.settings.homeLat;
+      const locLng = userGpsLng || data.settings.homeLng;
+      const hasLoc = Number.isFinite(locLat) && Number.isFinite(locLng);
+
+      // 优先使用 PlaceSearch（按距离排序，精准定位附近店铺）
+      if (hasLoc) {
+        const placeSearch = new AMap.PlaceSearch({
+          city: configuredCity(),
+          citylimit: false,
+          pageSize: 6,
+          extensions: "all"
         });
-      });
+        placeSearch.searchNearBy(query, new AMap.LngLat(locLng, locLat), 5000, (status, result) => {
+          if (token !== modalSearchToken) return;
+          if (status === "complete" && result.poiList && Array.isArray(result.poiList.pois) && result.poiList.pois.length > 0) {
+            ui.modalSearchLoading = false;
+            ui.modalSuggestions = result.poiList.pois.map((poi) => ({
+              name: poi.name,
+              address: `${poi.pname || ""}${poi.cityname || ""}${poi.adname || ""}${poi.address || ""}`,
+              lat: Number(poi.location.lat),
+              lng: Number(poi.location.lng),
+              category: poi.type ? poi.type.split(";")[0] : "商户",
+              distance: poi.distance,
+              source: "高德"
+            })).slice(0, 6);
+            render();
+            requestAnimationFrame(() => {
+              const el = document.querySelector('[data-field="modal-shop-name"]');
+              if (el) el.focus();
+            });
+            return;
+          }
+          // PlaceSearch 无结果，降级到 AutoComplete
+          doAutoCompleteSearch(AMap, query, token);
+        });
+      } else {
+        // 无定位，直接用 AutoComplete
+        doAutoCompleteSearch(AMap, query, token);
+      }
     } catch {
       ui.modalSearchLoading = false;
       ui.modalSuggestions = SAMPLE_POIS
@@ -2026,6 +2040,38 @@ function scheduleModalSearch(query) {
       });
     }
   }, 350);
+}
+
+function doAutoCompleteSearch(AMap, query, token) {
+  const acOpts = { city: configuredCity(), citylimit: false };
+  const locLat = userGpsLat || data.settings.homeLat;
+  const locLng = userGpsLng || data.settings.homeLng;
+  if (Number.isFinite(locLat) && Number.isFinite(locLng)) {
+    acOpts.location = new AMap.LngLat(locLng, locLat);
+  }
+  const autocomplete = new AMap.AutoComplete(acOpts);
+  autocomplete.search(query, (status, result) => {
+    if (token !== modalSearchToken) return;
+    ui.modalSearchLoading = false;
+    ui.modalSuggestions = status === "complete" && Array.isArray(result.tips)
+      ? result.tips
+          .filter((tip) => tip.name && tip.location)
+          .map((tip) => ({
+            name: tip.name,
+            address: `${tip.district || ""}${tip.address || ""}`,
+            lat: Number(tip.location.lat),
+            lng: Number(tip.location.lng),
+            category: tip.type || "商户",
+            source: "高德"
+          }))
+          .slice(0, 6)
+      : [];
+    render();
+    requestAnimationFrame(() => {
+      const el = document.querySelector('[data-field="modal-shop-name"]');
+      if (el) el.focus();
+    });
+  });
 }
 
 function focusSearch(cursor) {
@@ -2198,7 +2244,7 @@ async function detectCurrentCity() {
       }
     },
     () => { /* silently ignore */ },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
   );
 }
 

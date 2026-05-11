@@ -307,12 +307,12 @@ function render() {
     return;
   }
 
-  if (!currentAccount()) {
+  if (API_MODE !== "demo" && !currentAccount()) {
     app.innerHTML = renderAuthScreen();
     return;
   }
 
-  if (!hasPaidAccess()) {
+  if (API_MODE !== "demo" && !hasPaidAccess()) {
     app.innerHTML = renderPaywall();
     return;
   }
@@ -861,10 +861,8 @@ function renderSettingsView() {
 
       <div class="settings-card section">
         <h3>账号权限</h3>
-        <p class="settings-note">${escapeHtml(account?.phone || "")} · ${account?.subscriptionStatus === "active" ? "已开通会员" : "未开通"}</p>
-        <div class="button-row">
-          <button class="btn secondary" data-action="logout">${icon("undo")}退出登录</button>
-        </div>
+        <p class="settings-note">${account ? `${escapeHtml(account.phone || "")} · ${account.subscriptionStatus === "active" ? "已开通会员" : "未开通"}` : (API_MODE === "demo" ? "演示模式 · 无需登录" : "")}</p>
+        ${account ? `<div class="button-row"><button class="btn secondary" data-action="logout">${icon("undo")}退出登录</button></div>` : ""}
       </div>
     </section>
   `;

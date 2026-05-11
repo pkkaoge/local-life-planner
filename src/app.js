@@ -97,6 +97,7 @@ const ui = {
   modalSearch: "",
   modalSuggestions: [],
   modalSearchLoading: false,
+  modalPoiSelected: false,
   authPhone: "",
   authCode: "",
   smsPhone: "",
@@ -899,7 +900,7 @@ function renderModal() {
   const form = ui.form;
   const isEdit = Boolean(form.id);
   const locationReady = hasCoordinates(form);
-  const showPoi = ui.modalSearch.trim().length >= 2;
+  const showPoi = ui.modalSearch.trim().length >= 2 && ui.modalSuggestions.length > 0 && !ui.modalPoiSelected;
   const poiList = showPoi ? ui.modalSuggestions : [];
   return `
     <div class="modal-backdrop">
@@ -1108,6 +1109,7 @@ async function handleClick(event) {
       ui.form.category = poi.category || "";
       ui.modalSearch = poi.name;
       ui.modalSuggestions = [];
+      ui.modalPoiSelected = true;
       render();
       toast("已填入店铺信息");
     }
@@ -1119,6 +1121,7 @@ async function handleClick(event) {
     ui.form = {};
     ui.modalSearch = "";
     ui.modalSuggestions = [];
+    ui.modalPoiSelected = false;
     render();
     return;
   }
@@ -1227,6 +1230,7 @@ function handleInput(event) {
     ui.form.name = target.value;
     ui.modalSearch = target.value;
     ui.modalSuggestions = [];
+    ui.modalPoiSelected = false;
     scheduleModalSearch(ui.modalSearch);
     render();
     requestAnimationFrame(() => {

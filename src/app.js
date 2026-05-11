@@ -115,6 +115,8 @@ let auth = loadAuth();
 let apiAvailable = false;
 let apiChecked = false;
 let apiUser = null;
+let userGpsLat = null;
+let userGpsLng = null;
 let apiError = "";
 let booting = true;
 let syncTimer = 0;
@@ -1518,17 +1520,28 @@ async function saveShopForm() {
   }
 
   const saved = existing || data.shops[data.shops.length - 1];
-  if (saved.scheduledDate) {
-      if (!saved.order || oldDate !== saved.scheduledDate) saved.order = nextOrder(saved.scheduledDate);
-      await recalculateScheduleForDate(saved.scheduledDate);
-    }
-  if (oldDate && oldDate !== saved.scheduledDate) await recalculateScheduleForDate(oldDate);
 
+  // 先关闭弹窗、保存数据、显示成功，让用户立刻得到反馈
   ui.modal = null;
   ui.form = {};
   saveData();
   render();
   toast(existing ? "店铺已更新" : "店铺已添加");
+
+  // 异步重算排期（不阻塞用户操作）
+  (async () => {
+    try {
+      if (saved.scheduledDate) {
+        if (!saved.order || oldDate !== saved.scheduledDate) saved.order = nextOrder(saved.scheduledDate);
+        await recalculateScheduleForDate(saved.scheduledDate);
+      }
+      if (oldDate && oldDate !== saved.scheduledDate) await recalculateScheduleForDate(oldDate);
+      saveData();
+      render();
+    } catch (e) {
+      console.warn("后台重算排期失败", e);
+    }
+  })();
 }
 
 function normalizeShopForm(form) {
@@ -1966,10 +1979,18 @@ function scheduleModalSearch(query) {
     const token = ++modalSearchToken;
     try {
       const AMap = await ensureAmap();
-      const autocomplete = new AMap.AutoComplete({
+      // 使用用户实际位置做搜索偏向，提升精准度
+      const searchOpts = {
         city: configuredCity(),
         citylimit: false
-      });
+      };
+      // 如果有达人住址坐标或GPS坐标，设置 location 偏向
+      const locLat = data.settings.homeLat || userGpsLat;
+      const locLng = data.settings.homeLng || userGpsLng;
+      if (Number.isFinite(locLat) && Number.isFinite(locLng)) {
+        searchOpts.location = new AMap.LngLat(locLng, locLat);
+      }
+      const autocomplete = new AMap.AutoComplete(searchOpts);
       autocomplete.search(query, (status, result) => {
         if (token !== modalSearchToken) return;
         ui.modalSearchLoading = false;
@@ -2032,7 +2053,7 @@ function ensureAmap() {
 
   amapPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.AutoComplete,AMap.Geocoder`;
+    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.AutoComplete,AMap.PlaceSearch,AMap.Geocoder`;
     script.async = true;
     script.onload = () => window.AMap ? resolve(window.AMap) : reject(new Error("AMap failed to load"));
     script.onerror = () => reject(new Error("AMap script failed"));
@@ -2127,8 +2148,12 @@ function locateHome() {
   toast("正在定位...");
   navigator.geolocation.getCurrentPosition(
     async (position) => {
-      data.settings.homeLat = Number(position.coords.latitude.toFixed(6));
-      data.settings.homeLng = Number(position.coords.longitude.toFixed(6));
+      const lat = Number(position.coords.latitude.toFixed(6));
+      const lng = Number(position.coords.longitude.toFixed(6));
+      userGpsLat = lat;
+      userGpsLng = lng;
+      data.settings.homeLat = lat;
+      data.settings.homeLng = lng;
       data.settings.homeLabel = "当前位置";
       const address = await reverseGeocode(data.settings.homeLat, data.settings.homeLng);
       data.settings.homeAddress = address || `${data.settings.homeLat}, ${data.settings.homeLng}`;
@@ -2147,6 +2172,8 @@ async function detectCurrentCity() {
     async (position) => {
       const lat = Number(position.coords.latitude.toFixed(6));
       const lng = Number(position.coords.longitude.toFixed(6));
+      userGpsLat = lat;
+      userGpsLng = lng;
       try {
         const AMap = await ensureAmap();
         const geocoder = new AMap.Geocoder({});

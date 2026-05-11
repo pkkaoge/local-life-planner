@@ -156,6 +156,7 @@ async function init() {
 
   booting = false;
   render();
+  detectCurrentCity();
 }
 
 function loadData() {
@@ -169,7 +170,7 @@ function loadData() {
   try {
     const parsed = JSON.parse(raw);
     const settings = { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) };
-    settings.city = APP_CONFIG.city || settings.city;
+    settings.city = settings.city || APP_CONFIG.city;
     settings.mapProvider = APP_CONFIG.mapProvider || settings.mapProvider;
     return {
       settings,
@@ -921,7 +922,6 @@ function renderModal() {
               `).join("")}
               ${!ui.modalSearchLoading && !poiList.length ? '<div class="poi-empty">无匹配结果</div>' : ""}
             </div>` : ""}
-          </div>
           </div>
           <div class="field">
             <label>地址</label>
@@ -1888,7 +1888,7 @@ function amapSecurityCode() {
 }
 
 function configuredCity() {
-  return APP_CONFIG.city || data.settings.city || "全国";
+  return data.settings.city || APP_CONFIG.city || "全国";
 }
 
 function scheduleRemoteSearch(query) {
@@ -2095,10 +2095,15 @@ async function geocodeAddressValue(address) {
 async function reverseGeocode(lat, lng) {
   try {
     const AMap = await ensureAmap();
-    const geocoder = new AMap.Geocoder({ city: configuredCity() });
+    const geocoder = new AMap.Geocoder({});
     return await new Promise((resolve) => {
       geocoder.getAddress([lng, lat], (status, result) => {
-        if (status === "complete" && result.regeocode?.formattedAddress) {
+        if (status === "complete" && result.regeocode) {
+          const city = result.regeocode.addressComponent?.city || result.regeocode.addressComponent?.province;
+          if (city && city !== data.settings.city) {
+            data.settings.city = city;
+            saveData();
+          }
           resolve(result.regeocode.formattedAddress);
         } else {
           resolve(null);
@@ -2129,6 +2134,40 @@ function locateHome() {
     },
     () => toast("定位失败，请确认浏览器定位权限"),
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+async function detectCurrentCity() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const lat = Number(position.coords.latitude.toFixed(6));
+      const lng = Number(position.coords.longitude.toFixed(6));
+      try {
+        const AMap = await ensureAmap();
+        const geocoder = new AMap.Geocoder({});
+        const city = await new Promise((resolve) => {
+          geocoder.getAddress([lng, lat], (status, result) => {
+            if (status === "complete" && result.regeocode?.addressComponent?.city) {
+              resolve(result.regeocode.addressComponent.city);
+            } else if (status === "complete" && result.regeocode?.addressComponent?.province) {
+              resolve(result.regeocode.addressComponent.province);
+            } else {
+              resolve(null);
+            }
+          });
+        });
+        if (city && city !== data.settings.city) {
+          data.settings.city = city;
+          saveData();
+          render();
+        }
+      } catch {
+        // silently ignore
+      }
+    },
+    () => { /* silently ignore */ },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
   );
 }
 

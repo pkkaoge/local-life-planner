@@ -1,5 +1,7 @@
-const STORAGE_KEY = "douyin-local-planner-v1";
-const AUTH_STORAGE_KEY = "douyin-local-planner-auth-v1";
+const _testerId = new URLSearchParams(location.search).get("t") || "";
+const _keySuffix = _testerId ? `-t${_testerId}` : "";
+const STORAGE_KEY = `douyin-local-planner-v1${_keySuffix}`;
+const AUTH_STORAGE_KEY = `douyin-local-planner-auth-v1${_keySuffix}`;
 const APP_CONFIG = window.PLANNER_CONFIG || {};
 const API_BASE = String(APP_CONFIG.apiBase || "").replace(/\/$/, "");
 const API_MODE = APP_CONFIG.apiMode || "auto";

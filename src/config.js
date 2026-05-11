@@ -1,6 +1,6 @@
 window.PLANNER_CONFIG = {
   apiBase: "",
-  apiMode: "auto",
+  apiMode: "demo",
   amapKey: "bcfb2c22809e9e301734314e0f8a6cee",
   amapSecurityCode: "846b54c438251373f159a89402e1dba7",
   city: "上海",

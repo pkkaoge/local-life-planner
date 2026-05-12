@@ -704,14 +704,12 @@ function renderMonthCalendar() {
           <div class="month-day ${outside ? "outside" : ""} ${dateIso === ui.selectedDate ? "active" : ""} ${isToday ? "today" : ""}" data-action="select-date" data-date="${dateIso}">
             <div class="month-day-header">
               <strong>${date.getDate()}</strong>
-              ${dayShops.length ? `<span class="day-count">${dayShops.length}</span>` : ""}
-              <button class="btn-add-day" data-action="month-add-shop" data-date="${dateIso}" title="添加店铺">+</button>
             </div>
             <div class="month-day-shops">
-              ${dayShops.slice(0, 3).map((shop) => `
-                <span class="month-shop-tag ${shop.status === "filmed" ? "done" : ""}" data-action="edit-shop" data-id="${attr(shop.id)}">${escapeHtml(shop.name)}</span>
+              ${dayShops.slice(0, 2).map((shop) => `
+                <span class="month-shop-tag ${shop.status === "filmed" ? "done" : ""}">${escapeHtml(shop.name.length > 4 ? shop.name.slice(0, 4) + ".." : shop.name)}</span>
               `).join("")}
-              ${dayShops.length > 3 ? `<span class="month-shop-more">+${dayShops.length - 3}</span>` : ""}
+              ${dayShops.length > 2 ? `<span class="month-shop-more">+${dayShops.length - 2}</span>` : ""}
             </div>
           </div>
         `;
@@ -721,10 +719,10 @@ function renderMonthCalendar() {
       <div class="section-title">
         <h2>${escapeHtml(formatCNDate(ui.selectedDate))}</h2>
         <span class="mini-chip">月视图</span>
-        <button class="btn green small" data-action="month-add-shop" data-date="${ui.selectedDate}">${icon("plus")}添加店铺</button>
       </div>
       ${renderVisitList(ui.selectedDate)}
     </div>
+    <button class="fab" data-action="fab-add-shop" title="添加店铺">${icon("plus")}</button>
   `;
 }
 
@@ -1073,9 +1071,7 @@ async function handleClick(event) {
     return;
   }
 
-  if (action === "month-add-shop") {
-    const date = button.dataset.date;
-    if (date) ui.selectedDate = date;
+  if (action === "fab-add-shop") {
     openShopModal();
     render();
     return;

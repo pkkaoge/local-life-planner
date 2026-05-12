@@ -697,18 +697,32 @@ function renderMonthCalendar() {
       ${labels.map((label) => `<div class="month-head">${label}</div>`).join("")}
       ${days.map((dateIso) => {
         const date = toDate(dateIso);
-        const stats = getDayStats(dateIso);
+        const dayShops = getDayShops(dateIso);
         const outside = date.getMonth() !== current.getMonth();
+        const isToday = dateIso === toISODate(new Date());
         return `
-          <button class="month-day ${outside ? "outside" : ""} ${dateIso === ui.selectedDate ? "active" : ""}" data-action="select-date" data-date="${dateIso}">
-            <strong>${date.getDate()}</strong>
-            <span class="dots">${Array.from({ length: Math.min(stats.total, 5) }, (_, index) => `<span class="dot ${index < stats.done ? "done" : ""}"></span>`).join("")}</span>
-          </button>
+          <div class="month-day ${outside ? "outside" : ""} ${dateIso === ui.selectedDate ? "active" : ""} ${isToday ? "today" : ""}" data-action="select-date" data-date="${dateIso}">
+            <div class="month-day-header">
+              <strong>${date.getDate()}</strong>
+              ${dayShops.length ? `<span class="day-count">${dayShops.length}</span>` : ""}
+              <button class="btn-add-day" data-action="month-add-shop" data-date="${dateIso}" title="添加店铺">+</button>
+            </div>
+            <div class="month-day-shops">
+              ${dayShops.slice(0, 3).map((shop) => `
+                <span class="month-shop-tag ${shop.status === "filmed" ? "done" : ""}" data-action="edit-shop" data-id="${attr(shop.id)}">${escapeHtml(shop.name)}</span>
+              `).join("")}
+              ${dayShops.length > 3 ? `<span class="month-shop-more">+${dayShops.length - 3}</span>` : ""}
+            </div>
+          </div>
         `;
       }).join("")}
     </div>
     <div class="section">
-      <div class="section-title"><h2>${escapeHtml(formatCNDate(ui.selectedDate))}</h2><span class="mini-chip">月视图</span></div>
+      <div class="section-title">
+        <h2>${escapeHtml(formatCNDate(ui.selectedDate))}</h2>
+        <span class="mini-chip">月视图</span>
+        <button class="btn green small" data-action="month-add-shop" data-date="${ui.selectedDate}">${icon("plus")}添加店铺</button>
+      </div>
       ${renderVisitList(ui.selectedDate)}
     </div>
   `;
@@ -1055,6 +1069,14 @@ async function handleClick(event) {
 
   if (action === "calendar-mode") {
     ui.calendarMode = button.dataset.mode;
+    render();
+    return;
+  }
+
+  if (action === "month-add-shop") {
+    const date = button.dataset.date;
+    if (date) ui.selectedDate = date;
+    openShopModal();
     render();
     return;
   }

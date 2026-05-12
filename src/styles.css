@@ -710,7 +710,7 @@ h3 {
 .month-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: 2px;
 }
 
 .month-head {
@@ -722,34 +722,104 @@ h3 {
 
 .month-day {
   position: relative;
-  min-height: 58px;
+  min-height: 72px;
   text-align: left;
+  padding: 2px 3px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid transparent;
 }
 
 .month-day.outside {
-  opacity: 0.42;
+  opacity: 0.35;
 }
 
-.month-day strong {
+.month-day.today {
+  border-color: var(--green);
+}
+
+.month-day.active {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.month-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  cursor: pointer;
+  padding: 1px 0;
+}
+
+.month-day-header strong {
   font-size: 12px;
 }
 
-.month-day .dots {
+.month-day .btn-add-day {
+  font-size: 13px;
+  line-height: 1;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
   display: flex;
-  gap: 3px;
-  flex-wrap: wrap;
-  margin-top: 9px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
 }
 
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
+.month-day:hover .btn-add-day,
+.month-day.active .btn-add-day {
+  opacity: 1;
+}
+
+.month-day .day-count {
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 0 5px;
+  line-height: 16px;
+}
+
+.month-day-shops {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.month-shop-tag {
+  font-size: 9px;
+  line-height: 14px;
+  padding: 0 4px;
+  border-radius: 3px;
   background: var(--orange);
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
 }
 
-.dot.done {
+.month-shop-tag.done {
   background: var(--green);
+}
+
+.month-shop-more {
+  font-size: 9px;
+  line-height: 14px;
+  color: var(--muted);
+  text-align: center;
 }
 
 .form-grid {

@@ -789,7 +789,7 @@ function renderMonthCalendar() {
             </div>
             <div class="month-day-shops">
               ${dayShops.map((shop) => `
-                <span class="month-shop-tag ${shop.status === "filmed" ? "done" : ""}">${escapeHtml(shop.name)}</span>
+                <span class="month-shop-tag ${shop.status === "filmed" ? "done" : ""}">${escapeHtml(shop.name.slice(0, 4))}</span>
               `).join("")}
             </div>
           </div>

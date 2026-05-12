@@ -756,14 +756,7 @@ h3 {
   font-size: 12px;
 }
 
-.month-shop-more {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin-top: 2px;
-  flex: 1;
-  overflow: hidden;
-}
+
 
 .month-shop-tag {
   font-size: 9px;
@@ -782,12 +775,7 @@ h3 {
   color: var(--green);
 }
 
-.month-shop-more {
-  font-size: 9px;
-  line-height: 14px;
-  color: var(--muted);
-  text-align: center;
-}
+
 
 .form-grid {
   display: grid;

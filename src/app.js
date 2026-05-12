@@ -706,10 +706,9 @@ function renderMonthCalendar() {
               <strong>${date.getDate()}</strong>
             </div>
             <div class="month-day-shops">
-              ${dayShops.slice(0, 2).map((shop) => `
-                <span class="month-shop-tag ${shop.status === "filmed" ? "done" : ""}">${escapeHtml(shop.name.length > 4 ? shop.name.slice(0, 4) + ".." : shop.name)}</span>
+              ${dayShops.map((shop) => `
+                <span class="month-shop-tag ${shop.status === "filmed" ? "done" : ""}">${escapeHtml(shop.name.length > 6 ? shop.name.slice(0, 6) + ".." : shop.name)}</span>
               `).join("")}
-              ${dayShops.length > 2 ? `<span class="month-shop-more">+${dayShops.length - 2}</span>` : ""}
             </div>
           </div>
         `;

@@ -894,7 +894,6 @@ function renderBottomNav() {
   const items = [
     ["today", "今日", "home"],
     ["calendar", "日历", "calendar"],
-    ["shops", "店铺", "store"],
     ["settings", "设置", "settings"]
   ];
 

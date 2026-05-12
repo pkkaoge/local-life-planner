@@ -137,6 +137,88 @@ app.addEventListener("input", handleInput);
 app.addEventListener("change", handleChange);
 app.addEventListener("submit", handleSubmit);
 
+/* ── FAB draggable (iOS AssistiveTouch style) ── */
+let fabJustDragged = false;
+let fabDragging = false;
+let fabStartX = 0, fabStartY = 0, fabOrigX = 0, fabOrigY = 0;
+const FAB_DRAG_THRESHOLD = 8;
+
+function initFabDrag() {
+  const fab = document.querySelector(".fab");
+  if (!fab) return;
+
+  function onStart(e) {
+    const touch = e.touches ? e.touches[0] : e;
+    fabDragging = true;
+    fabJustDragged = false;
+    fabStartX = touch.clientX;
+    fabStartY = touch.clientY;
+    const rect = fab.getBoundingClientRect();
+    fabOrigX = rect.left;
+    fabOrigY = rect.top;
+    fab.classList.add("dragging");
+    fab.classList.remove("snapping");
+    // Switch to left-based positioning for smooth dragging
+    fab.style.left = rect.left + "px";
+    fab.style.top = rect.top + "px";
+    fab.style.right = "auto";
+    fab.style.bottom = "auto";
+  }
+
+  function onMove(e) {
+    if (!fabDragging) return;
+    e.preventDefault();
+    const touch = e.touches ? e.touches[0] : e;
+    const dx = touch.clientX - fabStartX;
+    const dy = touch.clientY - fabStartY;
+
+    // Check if actually dragging (beyond threshold)
+    if (!fabJustDragged && (Math.abs(dx) > FAB_DRAG_THRESHOLD || Math.abs(dy) > FAB_DRAG_THRESHOLD)) {
+      fabJustDragged = true;
+    }
+    if (!fabJustDragged) return;
+
+    const newX = Math.max(0, Math.min(window.innerWidth - 48, fabOrigX + dx));
+    const newY = Math.max(0, Math.min(window.innerHeight - 48, fabOrigY + dy));
+    fab.style.left = newX + "px";
+    fab.style.top = newY + "px";
+  }
+
+  function onEnd() {
+    if (!fabDragging) return;
+    fabDragging = false;
+    fab.classList.remove("dragging");
+    fab.classList.add("snapping");
+
+    const rect = fab.getBoundingClientRect();
+    const midX = window.innerWidth / 2;
+
+    // Snap to nearest edge
+    if (rect.left + 24 < midX) {
+      fab.style.left = "8px";
+    } else {
+      fab.style.left = (window.innerWidth - 56) + "px";
+    }
+
+    // Clear snapping class after animation
+    setTimeout(() => fab.classList.remove("snapping"), 300);
+  }
+
+  fab.addEventListener("touchstart", onStart, { passive: true });
+  fab.addEventListener("touchmove", onMove, { passive: false });
+  fab.addEventListener("touchend", onEnd);
+  fab.addEventListener("mousedown", onStart);
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onEnd);
+}
+
+// Re-init FAB drag after each render
+const origRender = render;
+render = function(...args) {
+  origRender(...args);
+  initFabDrag();
+};
+
 async function init() {
   if (API_MODE !== "demo") {
     try {
@@ -993,6 +1075,12 @@ async function handleClick(event) {
   const button = event.target.closest("[data-action]");
   if (!button) return;
   const action = button.dataset.action;
+
+  // Skip click if FAB was just dragged
+  if (action === "fab-add-shop" && fabJustDragged) {
+    fabJustDragged = false;
+    return;
+  }
 
   if (action === "send-code") {
     await sendSmsCode();
